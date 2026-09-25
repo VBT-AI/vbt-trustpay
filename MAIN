@@ -1,0 +1,7 @@
+main
+│
+├── feature/foundation
+├── feature/ai-agent
+├── feature/trust-engine
+├── feature/blockchain
+└── feature/frontend
