@@ -1,0 +1,5 @@
+import type { PaymentIntent } from "@/lib/shared/types";
+export const demoSupplier = { id: "supplier-abc", name: "ABC Software", registeredWallet: "0x1111111111111111111111111111111111111111", authorizedApprovers: ["demo-approver"] };
+export const demoInvoice = { id: "INV-001", supplierId: demoSupplier.id, amount: "500.00", currency: "USDC", status: "unpaid" as const };
+const base: PaymentIntent = { id: "demo-inv-001", supplierId: demoSupplier.id, supplierName: demoSupplier.name, invoiceId: demoInvoice.id, amount: "500.00", currency: "USDC", destinationWallet: demoSupplier.registeredWallet, requestedBy: "demo-approver", createdAt: "2026-01-01T12:00:00.000Z" };
+export const demoCases: Record<string, PaymentIntent> = { valid: base, walletAltered: { ...base, id: "demo-wallet-altered", destinationWallet: "0x2222222222222222222222222222222222222222" }, amountMismatch: { ...base, id: "demo-amount-mismatch", amount: "750.00" }, duplicate: { ...base, id: "demo-duplicate", invoiceId: "INV-PAID-001" }, unauthorized: { ...base, id: "demo-unauthorized", requestedBy: "unknown-user" } };
