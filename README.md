@@ -1,32 +1,35 @@
 # VBT TrustPay
 
-A hackathon project in preparation exploring AI-assisted business payments.
+AI-assisted payment control with deterministic verification, explicit human approval, and testnet evidence.
 
-## Problem
+**Ask → Analyze → Verify → Approve → Pay → Prove**
 
-Business payments can be exposed to supplier impersonation, incorrect destinations, duplicate invoices, and authorization errors.
+## Flow
 
-## Planned scope
+`User → AI → PaymentIntent → Trust Engine → Human Approval → Wallet → Smart Contract → Blockchain (testnet) → TX Hash → Payment Proof`
 
-These capabilities are part of the project plan; none are presented here as implemented or verified:
+The AI proposes details and explains results. Deterministic code validates them. An authorized human approves the exact payment before any wallet action.
 
-- AI payment requests
-- Supplier verification
-- Invoice validation
-- Wallet verification
-- Duplicate detection
-- Human approval
-- Testnet payment
-- Verifiable payment proof
+## Demo data
 
-## Proposed flow
-
-User → AI → Trust Engine → Human Approval → Smart Contract → Blockchain → Payment Proof
+ABC Software · INV-001 · 500 USDC · registered supplier wallet. Demo scenarios include valid details, altered wallet, amount mismatch, duplicate invoice, and unauthorized requester.
 
 ## Status
 
-Repository setup and planning are in progress. No payment functionality has been implemented or verified.
+This repository is an initial scaffold. The AI, Trust Engine and blockchain modules are explicit stubs; no payment is executed, no wallet connects, and no payment proof is generated. No production deployment or real funds.
 
-## Disclaimer
+## Local development
 
-The planned hackathon MVP is for testnet use only and is not a production payment system.
+Requires Node.js 20.9+ and npm.
+
+```bash
+npm install
+cp .env.example .env.local
+npm run dev
+```
+
+Open `http://localhost:3000`. See [setup](docs/setup.md), [architecture](docs/architecture.md), [security](docs/security.md), [demo](docs/demo.md), and [pitch](docs/pitch.md).
+
+## Checks
+
+`npm run lint` · `npm run typecheck` · `npm run build`
