@@ -1,7 +1,7 @@
 import type { HumanApproval, PaymentIntent, PaymentResult, TrustResult } from "@/lib/shared/types";
 
 const SEPOLIA_CHAIN_ID = 11155111;
-type PreparedTransfer = PaymentResult & { transaction: { to: `0x${string}`; data: `0x${string}`; value: "0x0" } };
+type PreparedTransfer = PaymentResult & { id: string; intentId: string; transaction: { to: `0x${string}`; data: `0x${string}`; value: "0x0" } };
 
 async function digestIntent(intent: PaymentIntent): Promise<string> {
   const bytes = new TextEncoder().encode(JSON.stringify(intent));
@@ -12,7 +12,7 @@ async function digestIntent(intent: PaymentIntent): Promise<string> {
 /** Creates unsigned Sepolia ERC-20 calldata. Never signs or broadcasts. */
 export async function prepareSepoliaTransfer(intent: PaymentIntent, trust: TrustResult, approval: HumanApproval): Promise<PreparedTransfer> {
   if (trust.status !== "APPROVED") throw new Error("Trust Engine approval required.");
-  if (approval.intentId !== intent.id || approval.intentDigest !== await digestIntent(intent)) throw new Error("Approval does not match this exact intent.");
+  if (approval.paymentIntentId !== intent.id || approval.intentDigest !== await digestIntent(intent)) throw new Error("Approval does not match this exact intent.");
   if (intent.currency !== "USDC") throw new Error("Only USDC is supported.");
   const token = process.env.NEXT_PUBLIC_SEPOLIA_USDC_ADDRESS;
   if (!token || !/^0x[a-fA-F0-9]{40}$/.test(token)) throw new Error("Configure a verified Sepolia USDC contract address.");
