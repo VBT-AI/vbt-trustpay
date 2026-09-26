@@ -1,16 +1,15 @@
-# VBT-AI
 # VBT TrustPay
-AI-powered programmable payments.
+
+A hackathon project in preparation exploring AI-assisted business payments.
+
 ## Problem
-Business payments can be exposed to supplier impersonation,
-wrong destinations, duplicate invoices and authorization errors.
-## Solution
-TrustPay combines AI, deterministic verification,
-human approval and blockchain evidence.
-## Architecture
-User → AI → Trust Engine → Human Approval
-→ Smart Contract → Blockchain → Payment Proof
-## Features
+
+Business payments can be exposed to supplier impersonation, incorrect destinations, duplicate invoices, and authorization errors.
+
+## Planned scope
+
+These capabilities are part of the project plan; none are presented here as implemented or verified:
+
 - AI payment requests
 - Supplier verification
 - Invoice validation
@@ -19,5 +18,15 @@ User → AI → Trust Engine → Human Approval
 - Human approval
 - Testnet payment
 - Verifiable payment proof
+
+## Proposed flow
+
+User → AI → Trust Engine → Human Approval → Smart Contract → Blockchain → Payment Proof
+
+## Status
+
+Repository setup and planning are in progress. No payment functionality has been implemented or verified.
+
 ## Disclaimer
-Hackathon MVP. Testnet only. Not a production payment system.
+
+The planned hackathon MVP is for testnet use only and is not a production payment system.
