@@ -1,3 +1,29 @@
-import type { PaymentIntent, PaymentResult } from "@/lib/shared/types";
-/** Testnet-only adapter stub. This function never signs or broadcasts. */
-export async function submitPayment(_intent: PaymentIntent): Promise<PaymentResult> { throw new Error("Blockchain execution not configured; no transaction submitted."); }
+import type { HumanApproval, PaymentIntent, PaymentResult, TrustResult } from "@/lib/shared/types";
+
+const SEPOLIA_CHAIN_ID = 11155111;
+type PreparedTransfer = PaymentResult & { transaction: { to: `0x${string}`; data: `0x${string}`; value: "0x0" } };
+
+async function digestIntent(intent: PaymentIntent): Promise<string> {
+  const bytes = new TextEncoder().encode(JSON.stringify(intent));
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+/** Creates unsigned Sepolia ERC-20 calldata. Never signs or broadcasts. */
+export async function prepareSepoliaTransfer(intent: PaymentIntent, trust: TrustResult, approval: HumanApproval): Promise<PreparedTransfer> {
+  if (trust.status !== "APPROVED") throw new Error("Trust Engine approval required.");
+  if (approval.intentId !== intent.id || approval.intentDigest !== await digestIntent(intent)) throw new Error("Approval does not match this exact intent.");
+  if (intent.currency !== "USDC") throw new Error("Only USDC is supported.");
+  const token = process.env.NEXT_PUBLIC_SEPOLIA_USDC_ADDRESS;
+  if (!token || !/^0x[a-fA-F0-9]{40}$/.test(token)) throw new Error("Configure a verified Sepolia USDC contract address.");
+  if (!/^0x[a-fA-F0-9]{40}$/.test(intent.destinationWallet)) throw new Error("Invalid destination wallet.");
+  const decimals = Number(process.env.SEPOLIA_USDC_DECIMALS ?? "6");
+  if (!Number.isInteger(decimals) || decimals < 0 || decimals > 18) throw new Error("Invalid token decimals.");
+  const parts = intent.amount.split(".");
+  if (parts.length > 2 || !/^(0|[1-9][0-9]*)$/.test(parts[0]) || (parts[1] !== undefined && (!/^[0-9]+$/.test(parts[1]) || parts[1].length > decimals))) throw new Error("Invalid amount precision.");
+  const units = BigInt(parts[0] + (parts[1] ?? "").padEnd(decimals, "0"));
+  const data = `0xa9059cbb${intent.destinationWallet.slice(2).toLowerCase().padStart(64, "0")}${units.toString(16).padStart(64, "0")}` as `0x${string}`;
+  return { id: `prepared-${intent.id}`, intentId: intent.id, status: "PREPARED", chainId: SEPOLIA_CHAIN_ID, transaction: { to: token as `0x${string}`, data, value: "0x0" } };
+}
+
+export async function submitPayment(): Promise<never> { throw new Error("Broadcasting is disabled; no transaction submitted."); }
