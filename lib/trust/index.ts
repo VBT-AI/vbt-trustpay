@@ -59,7 +59,7 @@ export async function evaluatePayment(intent: PaymentIntent, context: TrustConte
     check("SUPPLIER_EXISTS", !!supplier, supplier ? "Supplier exists." : "Supplier was not found.", { expected: intent.supplierId, actual: supplier?.id ?? "missing" }),
     check("INVOICE_OWNER_MATCH", !!invoice && !!supplier && invoice.supplierId === supplier.id, "Invoice belongs to the requested supplier.", { expected: invoice?.supplierId ?? "missing", actual: supplier?.id ?? "missing" }),
     check("VALID_AMOUNT", requested !== null && expected !== null, "Amounts use valid decimal precision.", { expected: invoice?.amount, actual: intent.amount }),
-    check("AMOUNT_MATCH", requested !== null && expected !== null && requested === expected, "Requested amount matches invoice amount.", { expected: invoice?.amount, actual: intent.amount }),
+    check("AMOUNT_MATCH", requested !== null && expected !== null && requested > 0n && requested <= expected, "Testnet demo amount is positive and does not exceed invoice total.", { expected: invoice?.amount, actual: intent.amount }),
     check("CURRENCY_MATCH", !!invoice && invoice.currency.toUpperCase() === intent.currency.toUpperCase(), "Currency matches invoice currency.", { expected: invoice?.currency, actual: intent.currency }),
     check("VALID_WALLET", validWallet, "Destination is a valid EVM address.", { actual: intent.destinationWallet }),
     check("WALLET_MATCH", !!supplier && validWallet && supplier.registeredWallet.toLowerCase() === intent.destinationWallet.toLowerCase(), "Destination matches the supplier registered wallet.", { expected: supplier?.registeredWallet, actual: intent.destinationWallet }),
