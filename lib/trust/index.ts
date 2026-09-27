@@ -1,7 +1,8 @@
 import type { PaymentIntent, TrustCheck, TrustResult } from "@/lib/shared/types";
-import mysql from "mysql2/promise"; 
+import mysql from "mysql2/promise";
+import type { RowDataPacket } from "mysql2"; 
 
-export type TrustInvoice = { id: string; supplierId: string; amount: string; currency: string; status: "unpaid" | "paid" };
+export type TrustInvoice = { id: string; supplierId: string; amount: string; currency: string; status: string };
 export type TrustSupplier = { id: string; name: string; registeredWallet: string };
 export type TrustContext = { invoices?: TrustInvoice[]; suppliers?: TrustSupplier[]; authorizedRequesters: string[]; decimals?: number };
 
@@ -18,34 +19,49 @@ export async function evaluatePayment(intent: PaymentIntent, context: TrustConte
   console.log("Proveedor que busca:", intent.supplierId);
   console.log("Factura que busca:", intent.invoiceId);
 
-  const connection = await mysql.createConnection(process.env.DATABASE_URL || "mysql://root:@localhost:3306/trustpay");
-  
-  const [invoiceRows] = await connection.execute("SELECT * FROM invoices WHERE id = ?", [intent.invoiceId]) as any[];
-  
-  // 2. Hacemos la búsqueda súper flexible con LIKE y comodines (%)
-  const [supplierRows] = await connection.execute(
-    "SELECT * FROM suppliers WHERE id = ? OR name LIKE ?", 
-    [intent.supplierId, `%${intent.supplierId}%`]
-  ) as any[];
-  
-  await connection.end(); 
+  let invoice: TrustInvoice | undefined;
+  let supplier: TrustSupplier | undefined;
 
-  const dbInvoice = invoiceRows[0];
-  const dbSupplier = supplierRows[0];
-
-  const invoice = dbInvoice ? {
-    id: dbInvoice.id,
-    supplierId: dbInvoice.supplier_id,
-    amount: dbInvoice.amount,
-    currency: dbInvoice.currency,
-    status: dbInvoice.status
-  } : undefined;
-
-  const supplier = dbSupplier ? {
-    id: dbSupplier.id,
-    name: dbSupplier.name,
-    registeredWallet: dbSupplier.registered_wallet
-  } : undefined;
+  if (context.invoices && context.suppliers) {
+    invoice = context.invoices.find((row) => row.id === intent.invoiceId);
+    supplier = context.suppliers.find(
+      (row) => row.id === intent.supplierId || row.name.toLowerCase() === intent.supplierName.toLowerCase(),
+    );
+  } else {
+    type InvoiceRow = RowDataPacket & { id: string; supplier_id: string; amount: string; currency: string; status: string };
+    type SupplierRow = RowDataPacket & { id: string; name: string; registered_wallet: string };
+    const connection = await mysql.createConnection(process.env.DATABASE_URL || "mysql://root:@localhost:3306/trustpay");
+    try {
+      const [invoiceRows] = await connection.execute<InvoiceRow[]>(
+        "SELECT * FROM invoices WHERE id = ?",
+        [intent.invoiceId],
+      );
+      const [supplierRows] = await connection.execute<SupplierRow[]>(
+        "SELECT * FROM suppliers WHERE id = ? OR name LIKE ?",
+        [intent.supplierId, "%" + intent.supplierName + "%"],
+      );
+      const dbInvoice = invoiceRows[0];
+      const dbSupplier = supplierRows[0];
+      invoice = dbInvoice
+        ? {
+            id: dbInvoice.id,
+            supplierId: dbInvoice.supplier_id,
+            amount: String(dbInvoice.amount),
+            currency: dbInvoice.currency,
+            status: dbInvoice.status,
+          }
+        : undefined;
+      supplier = dbSupplier
+        ? {
+            id: dbSupplier.id,
+            name: dbSupplier.name,
+            registeredWallet: dbSupplier.registered_wallet,
+          }
+        : undefined;
+    } finally {
+      await connection.end();
+    }
+  }
 
   const decimals = context.decimals ?? 6;
   const requested = toUnits(intent.amount, decimals);
