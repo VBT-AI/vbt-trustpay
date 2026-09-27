@@ -18,6 +18,15 @@
 
 For a hosted deployment, add `DATABASE_URL` in the hosting provider's server-side environment-variable settings and redeploy. Never use a `NEXT_PUBLIC_` prefix for this variable and never commit database credentials. The database must allow connections from the deployed app.
 
+## Deploy a demo on Railway
+
+1. Create a Railway project from the private GitHub repository and select the restore-sepolia-wallet-flow branch for a review deployment. Connect only the repository needed for this deployment.
+2. Add a MySQL database service to the same Railway project. Railway's MySQL template is an unmanaged MySQL container: attach a persistent volume at /var/lib/mysql, keep database networking private, and configure recurring backups in the service's Backups settings.
+3. In the app service's Variables tab, set DATABASE_URL=${{MySQL.MYSQL_URL}}, replacing MySQL with the exact database service name. This reference uses the private connection URL; do not enable public TCP access for the database.
+4. Set AI_PROVIDER=demo, NEXT_PUBLIC_SEPOLIA_PAYMENT_RECIPIENT_ADDRESS to the verified ABC Software public destination, and NEXT_PUBLIC_SEPOLIA_USDC_ADDRESS=0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238. Keep database credentials in Railway Variables; never commit them or prefix them with NEXT_PUBLIC_.
+5. Review the staged changes and deploy the app service. Railway detects the Next.js app and uses its npm build/start scripts. On the first successful request to /api/demo/payment-proof?invoiceId=INV-001, the app creates the payment_proofs table if needed.
+
+Use this as a testnet review deployment, not a production payment service. Railway's MySQL template requires the team to manage database maintenance and backups. The Railway Hobby plan currently has a $5 USD monthly minimum including $5 in usage; usage over that amount is billed separately.
 ## First manual Sepolia payment
 
 1. Enter the demo request for ABC Software, invoice INV-001, 500.00 USDC and analyze it. Confirm Trust Engine says APPROVED and shows the configured recipient address.
