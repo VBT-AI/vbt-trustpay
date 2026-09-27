@@ -13,7 +13,10 @@
 4. Set `NEXT_PUBLIC_SEPOLIA_PAYMENT_RECIPIENT_ADDRESS` to the intended public destination wallet address (20-byte `0x…` address). This is required: with it blank, analysis will not approve a real payment.
 5. The example config uses Circle USDC on Sepolia, address `0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238`, 6 decimals. Verify it against Circle's official contract list before a transfer. Optional `NEXT_PUBLIC_SEPOLIA_RPC_URL` is only needed for adding Sepolia to wallets that do not know the network. It must be a public HTTPS RPC URL; values with `NEXT_PUBLIC_` are exposed to the browser. Never place credentials or secrets there.
 6. Ensure the connected wallet has Sepolia ETH for network fees and enough Sepolia USDC for the amount. The app does not query or invent balances. Testnet assets have no real-world value.
-7. Run `npm run dev` and open http://localhost:3000.
+7. For durable PaymentProof records, set the server-only `DATABASE_URL` to a reachable MySQL/MariaDB connection URL. The app creates its `payment_proofs` table automatically. When `DATABASE_URL` is blank, local development falls back to `mysql://root:@localhost:3306/trustpay`; create that local database first if you use the fallback.
+8. Run `npm run dev` and open http://localhost:3000.
+
+For a hosted deployment, add `DATABASE_URL` in the hosting provider's server-side environment-variable settings and redeploy. Never use a `NEXT_PUBLIC_` prefix for this variable and never commit database credentials. The database must allow connections from the deployed app.
 
 ## First manual Sepolia payment
 
