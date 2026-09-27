@@ -16,4 +16,4 @@ export type TrustResult = { paymentIntentId: string; status: "APPROVED" | "BLOCK
 export type HumanApproval = { paymentIntentId: string; approvedBy: string; approvedAt: string; intentDigest: string };
 export type PaymentResult = { status: "PREPARED" | "SUBMITTED" | "CONFIRMED" | "FAILED"; txHash?: `0x${string}`; chainId?: number; error?: string };
 export type SecurityEvent = { id: string; type: string; severity: "info" | "warning" | "critical"; paymentIntentId?: string; message: string; createdAt: string };
-export type PaymentProof = { paymentIntentId: string; invoiceId: string; amount: string; currency: string; supplierId: string; destinationWallet: `0x${string}`; chainId: number; txHash: `0x${string}`; confirmedAt: string };
+export type PaymentProof = { paymentIntentId: string; invoiceId: string; amount: string; currency: string; supplierId: string; destinationWallet: `0x${string}`; chainId: number; network: "Ethereum Sepolia"; txHash: `0x${string}`; blockNumber: number; explorerUrl: string; confirmedAt: string };
