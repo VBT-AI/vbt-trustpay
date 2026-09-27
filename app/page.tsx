@@ -40,7 +40,6 @@ export default function Home() {
     }
   }
 
-  // --- AQUÍ SE AGREGÓ LA FUNCIÓN DEL RESET ---
   async function resetDemo() {
     try {
       await fetch("/api/demo/reset", { method: "POST" });
@@ -69,17 +68,10 @@ export default function Home() {
         <label htmlFor="payment-request" className="text-sm font-semibold">ASK · Describe a payment</label>
         <textarea id="payment-request" className="mt-3 min-h-28 w-full rounded-lg border border-slate-300 p-3" value={request} onChange={(event) => setRequest(event.target.value)} />
         
-        {/* --- AQUÍ SE AGREGÓ EL BOTÓN DE RESET --- */}
         <div className="mt-3 flex flex-wrap gap-3">
           <button onClick={analyze} disabled={loading} className="rounded-lg bg-blue-700 px-5 py-3 font-semibold text-white disabled:opacity-50">{loading ? "Analyzing…" : "Analyze payment"}</button>
-          
-          <button onClick={() => { setRequest("Pay ABC Software INV-001 for 500 USDC to an altered wallet"); setAnalysis(null); setApproved(false); }} className="rounded-lg border px-5 py-3">
-            Load wallet attack
-          </button>
-
-          <button onClick={resetDemo} className="rounded-lg border px-5 py-3 hover:bg-slate-50">
-            Reset Demo
-          </button>
+          <button onClick={() => { setRequest("Pay ABC Software INV-001 for 500 USDC to an altered wallet"); setAnalysis(null); setApproved(false); }} className="rounded-lg border px-5 py-3">Load wallet attack</button>
+          <button onClick={resetDemo} className="rounded-lg border px-5 py-3 hover:bg-slate-50">Reset Demo</button>
         </div>
 
         {error && <p role="alert" className="mt-4 text-red-700">{error}</p>}

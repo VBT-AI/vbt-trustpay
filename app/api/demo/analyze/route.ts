@@ -10,8 +10,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "request must be a string" }, { status: 400 });
     }
     const intent = await extractPaymentIntent(body.request);
-    
-    // Aquí agregamos el await para que espere la respuesta de tu MariaDB
     const trust = await evaluatePayment(intent, demoTrustContext);
     
     return NextResponse.json({ intent, trust, mode: process.env.AI_PROVIDER === "openai" ? "ai" : "demo" });

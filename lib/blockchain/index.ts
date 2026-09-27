@@ -1,7 +1,7 @@
 import type { HumanApproval, PaymentIntent, PaymentResult, TrustResult } from "@/lib/shared/types";
 
 const SEPOLIA_CHAIN_ID = 11155111;
-type PreparedTransfer = PaymentResult & { id: string; intentId: string; transaction: { to: `0x${string}`; data: `0x${string}`; value: "0x0" } };
+export type PreparedTransfer = PaymentResult & { id: string; intentId: string; transaction: { to: `0x${string}`; data: `0x${string}`; value: "0x0" } };
 
 async function digestIntent(intent: PaymentIntent): Promise<string> {
   const bytes = new TextEncoder().encode(JSON.stringify(intent));
@@ -9,9 +9,9 @@ async function digestIntent(intent: PaymentIntent): Promise<string> {
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-/** Creates unsigned Sepolia ERC-20 calldata. Never signs or broadcasts. */
+/** Builds unsigned Sepolia ERC-20 transfer calldata. Signing and broadcast happen only through the user wallet. */
 export async function prepareSepoliaTransfer(intent: PaymentIntent, trust: TrustResult, approval: HumanApproval): Promise<PreparedTransfer> {
-  if (trust.status !== "APPROVED") throw new Error("Trust Engine approval required.");
+  if (trust.paymentIntentId !== intent.id || trust.status !== "APPROVED") throw new Error("Trust Engine approval required for this exact payment intent.");
   if (approval.paymentIntentId !== intent.id || approval.intentDigest !== await digestIntent(intent)) throw new Error("Approval does not match this exact intent.");
   if (intent.currency !== "USDC") throw new Error("Only USDC is supported.");
   const token = process.env.NEXT_PUBLIC_SEPOLIA_USDC_ADDRESS;
@@ -26,4 +26,5 @@ export async function prepareSepoliaTransfer(intent: PaymentIntent, trust: Trust
   return { id: `prepared-${intent.id}`, intentId: intent.id, status: "PREPARED", chainId: SEPOLIA_CHAIN_ID, transaction: { to: token as `0x${string}`, data, value: "0x0" } };
 }
 
-export async function submitPayment(): Promise<never> { throw new Error("Broadcasting is disabled; no transaction submitted."); }
+/** Deliberately unavailable: every submission must use an explicit browser wallet confirmation. */
+export async function submitPayment(): Promise<never> { throw new Error("Use the connected browser wallet; server-side broadcasting is disabled."); }
