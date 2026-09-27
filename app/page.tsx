@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Activity, ArrowDownRight, ArrowRight, ArrowUpRight, Bell, Blocks, Check,
   ChevronDown, CircleAlert, CircleCheck, ClipboardList, Clock3, CreditCard,
@@ -126,9 +126,22 @@ export default function Home() {
   const [balances, setBalances] = useState<WalletBalances | null>(null);
   const [approval, setApproval] = useState<HumanApproval | null>(null);
   const [proof, setProof] = useState<PaymentProof | null>(null);
+  const [proofStorageError, setProofStorageError] = useState("");
+  const [proofLoadError, setProofLoadError] = useState("");
   const [sending, setSending] = useState(false);
   const [search, setSearch] = useState("");
 
+  useEffect(() => {
+    let active = true;
+    fetch("/api/demo/payment-proof?invoiceId=INV-001", { cache: "no-store" })
+      .then(async (response) => {
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || "Could not load saved PaymentProof.");
+        if (active) setProof(result.proof ?? null);
+      })
+      .catch((cause: unknown) => { if (active) setProofLoadError(cause instanceof Error ? cause.message : "Could not load saved PaymentProof."); });
+    return () => { active = false; };
+  }, []);
   const invoiceTotal = analysis?.trust.checks.find((check) => check.code === "AMOUNT_MATCH")?.expected ?? INVOICE_TOTAL;
   const intendedUnits = analysis ? toUnits(analysis.intent.amount) : null;
   const enoughUsdc = intendedUnits !== null && balances !== null && intendedUnits <= BigInt(balances.usdcUnits);
@@ -168,11 +181,20 @@ export default function Home() {
 
   async function pay() {
     if (!analysis || analysis.trust.status !== "APPROVED" || !approval || !wallet || !enoughUsdc) return;
-    setError(""); setProof(null); setSending(true);
+    setError(""); setProofStorageError(""); setSending(true);
     try {
       const confirmed = await executeSepoliaPayment(analysis.intent, analysis.trust, approval, wallet);
       setProof(confirmed.proof);
       setPage("proof");
+      try {
+        const response = await fetch("/api/demo/payment-proof", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ proof: confirmed.proof }) });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || "Payment confirmed, but PaymentProof could not be saved.");
+        setProof(result.proof);
+        setProofLoadError("");
+      } catch (cause) {
+        setProofStorageError(cause instanceof Error ? cause.message : "Payment confirmed, but PaymentProof could not be saved. Do not send this payment again.");
+      }
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Sepolia transaction failed."); }
     finally { setSending(false); }
   }
@@ -345,6 +367,8 @@ export default function Home() {
   function renderProof() {
     return <><SectionTitle eyebrow="EVIDENCE · BLOCKCHAIN" title="Payment proof" subtitle="Observed transaction evidence for the existing partial Sepolia transfer." action={<a className="button button-secondary" href={proof?.explorerUrl ?? EXISTING_TX_URL} target="_blank" rel="noreferrer">Open explorer <ArrowUpRight size={16} /></a>} />
       <Card className="proof-panel"><ProofDetails proof={proof} /></Card>
+      {proofLoadError && !proof && <p className="error-banner" role="status">Saved PaymentProof could not be loaded: {proofLoadError}</p>}
+      {proofStorageError && <p className="error-banner" role="status">Payment was confirmed on Sepolia, but its proof was not saved: {proofStorageError} Do not send the payment again.</p>}
     </>;
   }
 
