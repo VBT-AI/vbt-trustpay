@@ -12,7 +12,9 @@ export async function POST(request: Request) {
     }
     const intent = await extractPaymentIntent(body.request);
     const configuredRecipient = process.env.NEXT_PUBLIC_SEPOLIA_PAYMENT_RECIPIENT_ADDRESS;
-    const configuredIntent: PaymentIntent = configuredRecipient
+    const demoRecipient = demoTrustContext.suppliers[0]?.registeredWallet;
+    const useConfiguredRecipient = Boolean(configuredRecipient && demoRecipient && intent.destinationWallet.toLowerCase() === demoRecipient.toLowerCase());
+    const configuredIntent: PaymentIntent = useConfiguredRecipient && configuredRecipient
       ? { ...intent, destinationWallet: configuredRecipient as `0x${string}` }
       : intent;
     const trustContext = configuredRecipient
