@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { extractPaymentIntent } from "@/lib/ai";
 import { demoTrustContext } from "@/lib/data/demo";
+import type { PaymentIntent } from "@/lib/shared/types";
 import { evaluatePayment } from "@/lib/trust";
 
 export async function POST(request: Request) {
@@ -10,8 +11,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "request must be a string" }, { status: 400 });
     }
     const intent = await extractPaymentIntent(body.request);
-    const trust = evaluatePayment(intent, demoTrustContext);
-    return NextResponse.json({ intent, trust, mode: process.env.AI_PROVIDER === "openai" ? "ai" : "demo" });
+    const configuredRecipient = process.env.NEXT_PUBLIC_SEPOLIA_PAYMENT_RECIPIENT_ADDRESS;
+    const configuredIntent: PaymentIntent = configuredRecipient
+      ? { ...intent, destinationWallet: configuredRecipient as `0x${string}` }
+      : intent;
+    const trustContext = configuredRecipient
+      ? { ...demoTrustContext, suppliers: demoTrustContext.suppliers.map((supplier) => ({ ...supplier, registeredWallet: configuredRecipient })) }
+      : demoTrustContext;
+    const trust = evaluatePayment(configuredIntent, trustContext);
+    return NextResponse.json({ intent: configuredIntent, trust, mode: process.env.AI_PROVIDER === "openai" ? "ai" : "demo" });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Analysis failed" }, { status: 400 });
   }
