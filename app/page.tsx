@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { approvePaymentIntent, connectBrowserWallet, executeSepoliaPayment, getSepoliaBalances } from "@/lib/blockchain/wallet";
 import type { HumanApproval, PaymentIntent, PaymentProof, TrustResult } from "@/lib/shared/types";
 
@@ -24,7 +24,21 @@ export default function Home() {
   const [balances, setBalances] = useState<WalletBalances | null>(null);
   const [approval, setApproval] = useState<HumanApproval | null>(null);
   const [proof, setProof] = useState<PaymentProof | null>(null);
+  const [proofStorageError, setProofStorageError] = useState("");
+  const [proofLoadError, setProofLoadError] = useState("");
   const [sending, setSending] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    fetch("/api/demo/payment-proof?invoiceId=INV-001", { cache: "no-store" })
+      .then(async (response) => {
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || "Could not load saved PaymentProof.");
+        if (active) setProof(result.proof ?? null);
+      })
+      .catch((cause: unknown) => { if (active) setProofLoadError(cause instanceof Error ? cause.message : "Could not load saved PaymentProof."); });
+    return () => { active = false; };
+  }, []);
 
   const invoiceTotal = analysis?.trust.checks.find((check) => check.code === "AMOUNT_MATCH")?.expected ?? "";
   const partialDemo = !!analysis && invoiceTotal !== analysis.intent.amount;
@@ -32,7 +46,7 @@ export default function Home() {
   const enoughUsdc = intendedUnits !== null && balances !== null && intendedUnits <= BigInt(balances.usdcUnits);
 
   async function analyze() {
-    setLoading(true); setError(""); setAnalysis(null); setApproval(null); setProof(null);
+    setLoading(true); setError(""); setAnalysis(null); setApproval(null);
     try {
       const response = await fetch("/api/demo/analyze", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ request }) });
       const result = await response.json();
@@ -55,17 +69,26 @@ export default function Home() {
 
   async function approve() {
     if (!analysis || analysis.trust.status !== "APPROVED" || !wallet || !enoughUsdc) return;
-    setError(""); setProof(null);
+    setError("");
     try { setApproval(await approvePaymentIntent(analysis.intent, wallet)); }
     catch (cause) { setError(cause instanceof Error ? cause.message : "Approval failed."); }
   }
 
   async function pay() {
     if (!analysis || analysis.trust.status !== "APPROVED" || !approval || !wallet || !enoughUsdc) return;
-    setError(""); setProof(null); setSending(true);
+    setError(""); setProofStorageError(""); setSending(true);
     try {
       const confirmed = await executeSepoliaPayment(analysis.intent, analysis.trust, approval, wallet);
       setProof(confirmed.proof);
+      try {
+        const response = await fetch("/api/demo/payment-proof", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ proof: confirmed.proof }) });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || "Payment confirmed, but PaymentProof could not be saved.");
+        setProof(result.proof);
+        setProofLoadError("");
+      } catch (cause) {
+        setProofStorageError(cause instanceof Error ? cause.message : "Payment confirmed, but PaymentProof could not be saved. Do not send this payment again.");
+      }
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Sepolia transaction failed."); }
     finally { setSending(false); }
   }
@@ -80,7 +103,7 @@ export default function Home() {
       <textarea id="payment-request" className="mt-3 min-h-28 w-full rounded-lg border border-slate-300 p-3" value={request} onChange={(event) => setRequest(event.target.value)} />
       <div className="mt-3 flex flex-wrap gap-3">
         <button onClick={analyze} disabled={loading || sending} className="rounded-lg bg-blue-700 px-5 py-3 font-semibold text-white disabled:opacity-50">{loading ? "Analyzing…" : "Analyze payment"}</button>
-        <button onClick={() => { setRequest("Pay ABC Software INV-001 for 1 USDC to an altered wallet"); setAnalysis(null); setApproval(null); setProof(null); setError(""); }} className="rounded-lg border px-5 py-3">Load wallet mismatch test</button>
+        <button onClick={() => { setRequest("Pay ABC Software INV-001 for 1 USDC to an altered wallet"); setAnalysis(null); setApproval(null); setError(""); }} className="rounded-lg border px-5 py-3">Load wallet mismatch test</button>
       </div>
       {error && <p role="alert" className="mt-4 break-words text-red-700">{error}</p>}
       {analysis && <div className="mt-8 border-t pt-6">
@@ -103,12 +126,15 @@ export default function Home() {
             <button onClick={pay} disabled={sending || !enoughUsdc} className="mt-4 rounded-lg bg-blue-700 px-5 py-3 font-semibold text-white disabled:opacity-50">{sending ? "Waiting for Sepolia receipt…" : "Review in Rabby · " + analysis.intent.amount + " USDC"}</button>
           </div>}
         </div>}
-        {proof && <div className="mt-6 rounded-xl border border-emerald-300 bg-emerald-50 p-5">
+        
+      </div>}
+      {proofLoadError && !proof && <p className="mt-4 rounded-lg bg-amber-50 p-4 text-amber-900">Saved PaymentProof could not be loaded: {proofLoadError}</p>}
+      {proofStorageError && <p className="mt-4 rounded-lg bg-amber-50 p-4 text-amber-900">Payment was confirmed on Sepolia, but its proof was not saved: {proofStorageError} Do not send the payment again.</p>}
+      {proof && <div className="mt-6 rounded-xl border border-emerald-300 bg-emerald-50 p-5">
           <h3 className="font-semibold text-emerald-900">Payment confirmed · {proof.network}</h3>
           <dl className="mt-3 space-y-1 break-all text-sm"><div><dt className="inline font-semibold">TX hash: </dt><dd className="inline">{proof.txHash}</dd></div><div><dt className="inline font-semibold">Block: </dt><dd className="inline">{proof.blockNumber}</dd></div><div><dt className="inline font-semibold">Amount: </dt><dd className="inline">{proof.amount} {proof.currency}</dd></div><div><dt className="inline font-semibold">Destination: </dt><dd className="inline">{proof.destinationWallet}</dd></div><div><dt className="inline font-semibold">Confirmed: </dt><dd className="inline">{proof.confirmedAt}</dd></div></dl>
           <a className="mt-4 inline-block font-semibold text-blue-800 underline" href={proof.explorerUrl} target="_blank" rel="noreferrer">View transaction on Etherscan</a>
         </div>}
-      </div>}
     </section>
     <p className="mt-6 text-sm text-slate-500">Ethereum Sepolia only. Use test USDC and test ETH. Signing occurs only in Rabby; VBT TrustPay never handles private keys. This testnet demo does not settle or mark the invoice paid.</p>
   </main>;
