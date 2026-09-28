@@ -6,7 +6,7 @@ AI-assisted payment control with deterministic verification, explicit human appr
 
 ## Flow
 
-`User → AI → PaymentIntent → Trust Engine → Human Approval → Wallet → Smart Contract → Blockchain (testnet) → TX Hash → Payment Proof`
+`User → PaymentIntent → Trust Engine → Human Approval → Wallet → Circle USDC on Ethereum Sepolia → receipt → Payment Proof`
 
 The AI proposes details and explains results. Deterministic code validates them. An authorized human approves the exact payment before any wallet action.
 
@@ -16,7 +16,7 @@ ABC Software · INV-001 · 500 USDC · registered supplier wallet. Demo scenario
 
 ## Status
 
-This repository is an initial scaffold. The AI, Trust Engine and blockchain modules are explicit stubs; no payment is executed, no wallet connects, and no payment proof is generated. No production deployment or real funds.
+This is a runnable hackathon demo, not a production payment service. The deterministic Trust Engine blocks altered destinations. The browser-wallet path can make a user-approved Circle USDC transfer on Ethereum Sepolia. Its existing 1 USDC transaction is evidence against a synthetic 500 USDC invoice and must not be repeated. Tangem Wallet currently supports account-only WalletConnect on Ethereum mainnet; it cannot sign this Sepolia demo payment. No mainnet payment is enabled.
 
 ## Local development
 

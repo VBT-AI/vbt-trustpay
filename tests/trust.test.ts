@@ -1,45 +1,67 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { PaymentIntent } from "../lib/shared/types";
 import { evaluatePayment, type TrustContext } from "../lib/trust";
 
-const wallet = "0x1111111111111111111111111111111111111111" as const;
-const context: TrustContext = {
-  suppliers: [{ id: "abc-software", name: "ABC Software", registeredWallet: wallet }],
-  invoices: [
-    { id: "INV-001", supplierId: "abc-software", amount: "500.00", currency: "USDC", status: "unpaid" },
-    { id: "INV-PAID-001", supplierId: "abc-software", amount: "500.00", currency: "USDC", status: "paid" },
-  ],
-  authorizedRequesters: ["demo-approver"],
-  decimals: 6,
-};
+const database = vi.hoisted(() => ({
+  invoices: [] as Array<Record<string, unknown>> ,
+  suppliers: [] as Array<Record<string, unknown>> ,
+}));
+
+vi.mock("mysql2/promise", () => ({
+  default: {
+    createConnection: vi.fn(async () => ({
+      execute: vi.fn(async (query: string, params?: unknown[]) => {
+        if (query.includes("FROM invoices")) {
+          return [database.invoices.filter((row) => row.id === params?.[0]), []];
+        }
+        return [database.suppliers, []];
+      }),
+      end: vi.fn(async () => undefined),
+    })),
+  },
+}));
+
+const wallet = "0x669bcC0eca97bE32Cb3677c005B0dC869ead07A8";
+const context: TrustContext = { authorizedRequesters: ["demo-approver"], decimals: 6 };
 
 function intent(overrides: Partial<PaymentIntent> = {}): PaymentIntent {
   return {
-    id: "test-payment", supplierId: "abc-software", supplierName: "ABC Software", invoiceId: "INV-001",
+    id: "test-payment", supplierId: "supplier-abc", supplierName: "ABC Software", invoiceId: "INV-001",
     amount: "500.00", currency: "USDC", destinationWallet: wallet, requestedBy: "demo-approver",
     createdAt: "2026-09-26T00:00:00.000Z", ...overrides,
   };
 }
 
-function expectBlocked(payment: PaymentIntent, code: string) {
-  const result = evaluatePayment(payment, context);
+beforeEach(() => {
+  database.invoices = [
+    { id: "INV-001", supplier_id: "supplier-abc", amount: "500.00", currency: "USDC", status: "unpaid" },
+    { id: "INV-PAID-001", supplier_id: "supplier-abc", amount: "500.00", currency: "USDC", status: "paid" },
+  ];
+  database.suppliers = [{ id: "supplier-abc", name: "ABC Software", registered_wallet: wallet }];
+});
+
+async function checkFailure(payment: PaymentIntent, code: string) {
+  const result = await evaluatePayment(payment, context);
   expect(result.status).toBe("BLOCKED");
-  expect(result.reasons).toContain(code);
-  expect(result.humanApprovalRequired).toBe(true);
+  expect(result.checks.find((check) => check.code === code)?.passed).toBe(false);
 }
 
 describe("evaluatePayment", () => {
-  it("approves a matching invoice and authorized requester", () => {
-    const result = evaluatePayment(intent(), context);
+  it("approves the registered supplier wallet and invoice", async () => {
+    const result = await evaluatePayment(intent(), context);
     expect(result.status).toBe("APPROVED");
-    expect(result.reasons).toEqual([]);
-    expect(result.humanApprovalRequired).toBe(true);
+    expect(result.paymentIntentId).toBe("test-payment");
   });
-  it("blocks an altered wallet", () => expectBlocked(intent({ destinationWallet: "0x2222222222222222222222222222222222222222" }), "WALLET_MATCH"));
-  it("blocks an amount mismatch", () => expectBlocked(intent({ amount: "750.00" }), "AMOUNT_MATCH"));
-  it("blocks a previously paid duplicate invoice", () => expectBlocked(intent({ invoiceId: "INV-PAID-001" }), "INVOICE_UNPAID"));
-  it("blocks an unauthorized requester", () => expectBlocked(intent({ requestedBy: "unknown-user" }), "REQUESTER_AUTHORIZED"));
-  it("blocks an unknown invoice", () => expectBlocked(intent({ invoiceId: "INV-UNKNOWN" }), "INVOICE_EXISTS"));
-  it("blocks malformed wallet addresses", () => expectBlocked(intent({ destinationWallet: "not-an-address" as PaymentIntent["destinationWallet"] }), "VALID_WALLET"));
-  it("blocks amounts over configured decimal precision", () => expectBlocked(intent({ amount: "500.0000001" }), "VALID_AMOUNT"));
+  it("allows a positive partial testnet amount", async () => {
+    const result = await evaluatePayment(intent({ amount: "1.00" }), context);
+    expect(result.status).toBe("APPROVED");
+    expect(result.checks.find((check) => check.code === "AMOUNT_MATCH")?.passed).toBe(true);
+  });
+  it("blocks an amount above invoice total", async () => checkFailure(intent({ amount: "750.00" }), "AMOUNT_MATCH"));
+  it("blocks a wallet mismatch", async () => checkFailure(intent({ destinationWallet: "0x2222222222222222222222222222222222222222" }), "WALLET_MATCH"));
+  it("blocks a previously paid invoice", async () => checkFailure(intent({ invoiceId: "INV-PAID-001" }), "INVOICE_UNPAID"));
+  it("blocks an unauthorized requester", async () => checkFailure(intent({ requestedBy: "unknown-user" }), "REQUESTER_AUTHORIZED"));
+  it("blocks an unknown invoice", async () => checkFailure(intent({ invoiceId: "INV-UNKNOWN" }), "INVOICE_EXISTS"));
+  it("blocks an invalid wallet address", async () => checkFailure(intent({ destinationWallet: "not-an-address" as PaymentIntent["destinationWallet"] }), "VALID_WALLET"));
+  it("blocks amounts exceeding token precision", async () => checkFailure(intent({ amount: "500.0000001" }), "VALID_AMOUNT"));
 });

@@ -1,21 +1,20 @@
 # Demo scenarios
 
-## Safe simulated cases
+## A · VALID PAYMENT (existing evidence only)
 
-The deterministic demo starts from ABC Software, invoice INV-001, amount 500.00 USDC and a synthetic registered supplier wallet. Its test cases cover:
+The demo uses ABC Software, invoice INV-001, with a demo invoice total of 500.00 USDC. The existing Sepolia testnet transfer is 1 USDC, a partial test transfer. It does not settle or mark the full invoice paid.
 
-- Valid details: the Trust Engine may approve the exact intent and the app requires a separate human approval.
-- Altered destination wallet: BLOCKED with a wallet mismatch.
-- Amount mismatch: BLOCKED when the request differs from the invoice.
-- Duplicate invoice/payment intent: BLOCKED.
-- Unauthorized requester: BLOCKED.
+- Trust Engine: APPROVED for the registered ABC Software destination.
+- Human approval and the existing Sepolia wallet flow lead to Payment Proof.
+- Existing transaction: [0xc8a1ec3fff87020447e56ebf59ef60190227eccc5a9dfdd42a110830c26cb2b4](https://sepolia.etherscan.io/tx/0xc8a1ec3fff87020447e56ebf59ef60190227eccc5a9dfdd42a110830c26cb2b4)
+- Network: Ethereum Sepolia (chain ID 11155111); block: 11794765.
 
-These cases exercise validation only. Synthetic addresses and example data must never be treated as real recipients or evidence of on-chain activity.
+Use this already-confirmed transaction as the evidence. Do not send another USDC transfer for the demo.
 
-## Manual Sepolia transfer
+## B · WALLET_MISMATCH
 
-A real test transfer is available only when `NEXT_PUBLIC_SEPOLIA_PAYMENT_RECIPIENT_ADDRESS` is set locally to the intended public destination address and the Trust Engine approves that configured destination. Follow `docs/setup.md`. Connect your wallet, verify the sender and Sepolia network, approve the exact intent, then inspect and confirm the transaction in the wallet. No private key is requested by or supplied to the app.
+Use the built-in mismatch scenario, which changes only the requested destination in the demo PaymentIntent. The supplier's registered wallet remains unchanged. The Trust Engine returns BLOCKED because `WALLET_MATCH` fails. The page must show `TRUST ENGINE: BLOCKED`, `PAYMENT BLOCKED`, and `WALLET MISMATCH`, compare the registered and requested wallets, and state that no transaction was created and no wallet signature was requested. No connect, approve, or sign action is available in this state.
 
-A PaymentProof is shown only after the Sepolia receipt is successful. It contains the observed transaction hash, block number, network, and explorer link. Before then there is no TX hash or receipt to report. After an app timeout, check the wallet/explorer before retrying.
+## Demo boundaries
 
-Use Sepolia test assets only. There is no mainnet support; sensitive business data remains off-chain.
+The supplier, invoice, and invoice total are synthetic demo data. The Sepolia transaction is a testnet transfer and does not represent a production payment or a production reliability claim. No private key is handled by the app; no mainnet payment is supported.

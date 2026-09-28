@@ -11,7 +11,7 @@ export async function POST(request: Request) {
     }
     const intent = await extractPaymentIntent(body.request);
     const trust = await evaluatePayment(intent, demoTrustContext);
-    
+
     return NextResponse.json({ intent, trust, mode: process.env.AI_PROVIDER === "openai" ? "ai" : "demo" });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Analysis failed" }, { status: 400 });
