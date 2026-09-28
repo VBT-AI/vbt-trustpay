@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import {
   Activity, ArrowDownRight, ArrowRight, ArrowUpRight, Bell, Blocks, Check,
   ChevronDown, CircleAlert, CircleCheck, ClipboardList, Clock3, CreditCard,
@@ -8,8 +9,9 @@ import {
   ShieldCheck, Users, WalletCards,
 } from "lucide-react";
 import { PaymentReview } from "@/components/payment-review";
-import { approvePaymentIntent, connectBrowserWallet, executeSepoliaPayment, getSepoliaBalances } from "@/lib/blockchain/wallet";
+import { approvePaymentIntent, connectBrowserWallet, connectTangemWallet, executeSepoliaPayment, getSepoliaBalances } from "@/lib/blockchain/wallet";
 import type { HumanApproval, PaymentIntent, PaymentProof, TrustResult } from "@/lib/shared/types";
+import type { WalletConnection, WalletProvider } from "@/lib/blockchain/wallet";
 
 const FLOW = ["ASK", "ANALYZE", "VERIFY", "APPROVE", "PAY", "PROVE"] as const;
 const REGISTERED_WALLET = "0x669bcC0eca97bE32Cb3677c005B0dC869ead07A8";
@@ -30,6 +32,17 @@ const NAV: { id: Page; label: string; icon: typeof LayoutDashboard }[] = [
   { id: "security", label: "Security events", icon: ShieldAlert },
   { id: "audit", label: "Audit trail", icon: ClipboardList },
 ];
+
+function walletErrorMessage(cause: unknown, kind: WalletConnection["kind"]): string {
+  if (cause instanceof Error && cause.message) return cause.message;
+  if (cause && typeof cause === "object") {
+    const detail = cause as { message?: unknown; shortMessage?: unknown; code?: unknown; data?: { message?: unknown } };
+    const message = [detail.shortMessage, detail.message, detail.data?.message].find((value): value is string => typeof value === "string" && value.length > 0);
+    if (message) return message;
+    if (typeof detail.code === "number" || typeof detail.code === "string") return `Wallet connection failed (code ${detail.code}).`;
+  }
+  return kind === "tangem" ? "Tangem could not connect. Add Ethereum to your Tangem wallet and try again." : "Wallet connection failed.";
+}
 
 function toUnits(amount: string): bigint | null {
   const parts = amount.split(".");
@@ -122,6 +135,10 @@ export default function Home() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [wallet, setWallet] = useState<string | null>(null);
+  const [walletProvider, setWalletProvider] = useState<WalletProvider | null>(null);
+  const [walletKind, setWalletKind] = useState<WalletConnection["kind"] | null>(null);
+  const [walletChainId, setWalletChainId] = useState<number | null>(null);
+  const [connectingWallet, setConnectingWallet] = useState(false);
   const [network, setNetwork] = useState("");
   const [balances, setBalances] = useState<WalletBalances | null>(null);
   const [approval, setApproval] = useState<HumanApproval | null>(null);
@@ -160,20 +177,20 @@ export default function Home() {
     finally { setLoading(false); }
   }
 
-  async function connect() {
+  async function connect(kind: WalletConnection["kind"]) {
     if (!analysis || analysis.trust.status !== "APPROVED") return;
-    setError(""); setApproval(null); setBalances(null);
+    setError(""); setApproval(null); setBalances(null); setConnectingWallet(true);
     try {
-      const connected = await connectBrowserWallet();
-      const currentBalances = await getSepoliaBalances(connected.address);
-      setWallet(connected.address);
-      setNetwork(`Ethereum Sepolia · chain ${connected.chainId}`);
-      setBalances(currentBalances);
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "Wallet connection failed."); }
+      const connected = kind === "tangem" ? await connectTangemWallet() : await connectBrowserWallet();
+      setWallet(connected.address); setWalletProvider(connected.provider); setWalletKind(connected.kind); setWalletChainId(connected.chainId);
+      setNetwork(connected.chainId === 11155111 ? `Ethereum Sepolia · chain ${connected.chainId}` : `Connected network · chain ${connected.chainId}`);
+      if (connected.chainId === 11155111) setBalances(await getSepoliaBalances(connected.address, connected.provider));
+    } catch (cause) { setError(walletErrorMessage(cause, kind)); }
+    finally { setConnectingWallet(false); }
   }
 
   async function approve() {
-    if (!analysis || analysis.trust.status !== "APPROVED" || !wallet || !enoughUsdc) return;
+    if (!analysis || analysis.trust.status !== "APPROVED" || !wallet || walletChainId !== 11155111 || !enoughUsdc) return;
     setError(""); setProof(null);
     try { setApproval(await approvePaymentIntent(analysis.intent, wallet)); }
     catch (cause) { setError(cause instanceof Error ? cause.message : "Approval failed."); }
@@ -183,7 +200,8 @@ export default function Home() {
     if (!analysis || analysis.trust.status !== "APPROVED" || !approval || !wallet || !enoughUsdc) return;
     setError(""); setProofStorageError(""); setSending(true);
     try {
-      const confirmed = await executeSepoliaPayment(analysis.intent, analysis.trust, approval, wallet);
+      if (!walletProvider || walletChainId !== 11155111) throw new Error("This demo payment requires an active wallet connection on Ethereum Sepolia.");
+      const confirmed = await executeSepoliaPayment(analysis.intent, analysis.trust, approval, wallet, walletProvider);
       setProof(confirmed.proof);
       setPage("proof");
       try {
@@ -217,12 +235,13 @@ export default function Home() {
   function paymentControls() {
     if (!analysis || analysis.trust.status !== "APPROVED") return null;
     return <div className="gate-actions">
-      {!wallet && <button className="button button-secondary" onClick={connect}><WalletCards size={17} /> Connect Rabby · Sepolia</button>}
-      {wallet && <div className="wallet-summary"><span className="wallet-dot" /><div><strong>Rabby connected</strong><span>{wallet}</span></div></div>}
-      {network && <p className="wallet-meta">{network} · {balances ? `${balances.usdc} USDC · ${balances.eth} ETH` : "Checking balances…"}</p>}
+      {!wallet && <div className="wallet-options"><button className="button button-secondary" onClick={() => connect("browser")} disabled={connectingWallet}><WalletCards size={17} /> Connect browser wallet · Sepolia</button><button className="button button-secondary" onClick={() => connect("tangem")} disabled={connectingWallet}><WalletCards size={17} /> Connect Tangem Wallet · read-only</button></div>}
+      {wallet && <div className="wallet-summary"><span className="wallet-dot" /><div><strong>{walletKind === "tangem" ? "Tangem Wallet · WalletConnect" : "Browser wallet connected"}</strong><span>{wallet}</span></div></div>}
+      {network && <p className="wallet-meta">{network}{balances ? ` · ${balances.usdc} USDC · ${balances.eth} ETH` : walletChainId === 11155111 ? " · Checking balances…" : " · Read-only connection"}</p>}
+      {wallet && walletChainId !== 11155111 && <p className="inline-warning">This Tangem connection is read-only on Ethereum mainnet. Tangem Wallet does not list Sepolia for WalletConnect, and this testnet payment cannot be approved or signed here.</p>}
       {wallet && !enoughUsdc && <p className="inline-warning">The connected Sepolia USDC balance is below this intent amount. Lower the amount and analyze again before approval.</p>}
-      {wallet && enoughUsdc && !approval && <button className="button button-primary" onClick={approve}>I approve this exact intent <ArrowRight size={17} /></button>}
-      {approval && <div className="transaction-review">
+      {wallet && walletChainId === 11155111 && enoughUsdc && !approval && <button className="button button-primary" onClick={approve}>I approve this exact intent <ArrowRight size={17} /></button>}
+      {approval && walletChainId === 11155111 && <div className="transaction-review">
         <div className="review-facts review-facts-compact">
           <div><span>Provider</span><strong>{analysis.intent.supplierName}</strong></div>
           <div><span>Invoice</span><strong>{analysis.intent.invoiceId}{invoiceTotal ? ` · total ${invoiceTotal} USDC` : ""}</strong></div>
@@ -280,7 +299,7 @@ export default function Home() {
         <Card>
           <div className="panel-heading"><div><h2>Blockchain network</h2><p>Connected only when Trust Engine approves</p></div></div>
           <div className="network-summary"><span className="ethereum-mark">Ξ</span><div><strong>Ethereum Sepolia</strong><span>Test network · Chain ID 11155111</span></div><span className="tag tag-testnet">TESTNET</span></div>
-          <p className="network-foot"><LockKeyhole size={15} /> Wallet signatures stay in Rabby. TrustPay never handles private keys.</p>
+          <p className="network-foot"><LockKeyhole size={15} /> Wallet signatures are handled by your wallet. TrustPay never handles private keys.</p>
         </Card>
       </div>
     </>;
@@ -376,7 +395,7 @@ export default function Home() {
 
   return <div className="app-shell">
     <aside className="sidebar">
-      <button className="brand-block" onClick={() => setPage("dashboard")} aria-label="VBT TrustPay dashboard"><span className="brand-mark">V</span><span className="brand-name">VBT <strong>TrustPay</strong></span></button>
+      <button className="brand-block" onClick={() => setPage("dashboard")} aria-label="VBT TrustPay dashboard"><Image className="brand-logo" src="/vbt-logo.svg" width={400} height={110} priority alt="VBT AI Consulting — Inteligencia que transforma. Resultados que multiplican." /></button>
       <p className="brand-caption">Intelligent payment<br />control layer</p>
       <button className="sidebar-new-payment" onClick={startNewPayment}><Plus size={18} /> New payment</button>
       <nav className="primary-nav" aria-label="Main navigation">{NAV.map(({ id, label, icon: Icon }) => <button key={id} className={`nav-link ${page === id ? "nav-link-active" : ""}`} onClick={() => setPage(id)}><Icon size={19} strokeWidth={1.8} /><span>{label}</span>{id === "security" && blocked && <span className="nav-count">1</span>}</button>)}</nav>
@@ -401,7 +420,7 @@ export default function Home() {
         {page === "security" && renderSecurity()}
         {page === "audit" && renderAudit()}
         {page === "proof" && renderProof()}
-        <footer className="app-footer"><span>VBT TrustPay · Sepolia test mode</span><span><LockKeyhole size={13} /> Browser wallet signatures only · No mainnet or real funds</span></footer>
+        <footer className="app-footer"><span>VBT TrustPay · Sepolia test mode</span><span><LockKeyhole size={13} /> Sepolia demo signatures stay in your wallet · No mainnet payments</span></footer>
       </main>
     </div>
   </div>;

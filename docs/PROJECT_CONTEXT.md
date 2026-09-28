@@ -10,10 +10,10 @@ AI interprets requests and explains outcomes. Deterministic code decides trust. 
 
 ## Module responsibilities and prohibitions
 
-- **AI (`lib/ai`)**: parse natural-language requests into a proposed `PaymentIntent`; ask for missing or ambiguous details; explain checks. It must not decide trust, authorize, approve, access private keys, sign, submit, or claim payment success. Treat AI output as untrusted input.
+- **Request intake (`app/`, `lib/ai`)**: collect a payment request and create the demo PaymentIntent. Request parsing is demo-scoped; it must not decide trust or authorize, approve, access private keys, sign, submit, or claim payment success. Treat parsed fields as untrusted input.
 - **Trust Engine (`lib/trust`)**: deterministic validation only. Check invoice exists and is unpaid; supplier identity and invoice ownership; exact amount and currency; destination equals the registered supplier wallet; duplicate intent/invoice; requester authorization; valid chain/token configuration. Return explicit checks and reasons. Any mismatch blocks; missing/ambiguous evidence requires review. AI cannot override it.
 - **Human approval**: required after checks and before wallet signing. Approval is tied to the immutable intent fields (supplier, invoice, amount, currency, wallet, chain) and expires if any field changes.
-- **Blockchain (`lib/blockchain`, `contracts/`)**: reviewed contract and adapter, testnet only. Never embed signing keys or bypass Trust Engine/human approval.
+- **Blockchain (`lib/blockchain`)**: Circle USDC transfer through an explicit user wallet on Ethereum Sepolia only. Tangem WalletConnect is account-only on Ethereum mainnet because Tangem does not list Sepolia. Never embed signing keys or bypass Trust Engine/human approval.
 - **Frontend (`app/`, `components/`)**: show intent, deterministic checks, approval state, and verified receipt distinctly. Never portray stubs or simulated results as executed payments.
 - **Integration (`lib/data`, shared types, docs)**: preserve the shared contract and coordinate changes across owners.
 
@@ -27,7 +27,7 @@ Synthetic supplier **ABC Software**, invoice **INV-001**, amount **500 USDC**, u
 
 ## Security and environment
 
-- Testnet only; no production deployment and no real funds. Do not use mainnet RPCs or real signing keys.
+- Testnet payments only; no mainnet payment or production readiness claim. A Tangem mainnet connection may read the public account and chain only; it requests no signing methods and exposes no payment controls. Do not use real signing keys.
 - Never commit secrets. Use local `.env.local`; `.env.example` contains names/placeholders only.
 - Personal, invoice, supplier, credential, and other sensitive business data stays off-chain. Put only minimum non-sensitive verification material on-chain.
 - Never put private keys, API keys, or sensitive invoice data in source, logs, URLs, prompts, or transaction metadata.
@@ -39,4 +39,4 @@ Do not change architecture, trust boundaries, shared types, or transaction flow 
 
 ## Current implementation status
 
-The repository is a scaffold. A module that throws “not configured” is a stub, not an implementation. No AI provider, deterministic Trust Engine, wallet, contract deployment, transaction submission, or payment proof is currently operational.
+The current scope is a hackathon demo. The deterministic Trust Engine, browser-wallet Sepolia flow, Payment Proof, and wallet-mismatch blocked state are implemented. Tangem connection is read-only; production authentication, supplier/customer role management, arbitrary token/network routing, and production payment processing are not implemented. The only real testnet transfer retained as evidence is the documented 1 USDC transaction.

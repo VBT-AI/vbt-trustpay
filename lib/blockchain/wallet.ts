@@ -6,6 +6,8 @@ const SEPOLIA_CHAIN_HEX = "0xaa36a7";
 const SEPOLIA_EXPLORER = "https://sepolia.etherscan.io/tx/";
 type RequestArguments = { method: string; params?: unknown[] | Record<string, unknown> };
 export type Eip1193Provider = { request(args: RequestArguments): Promise<unknown> };
+export type WalletProvider = Eip1193Provider & { connect?: () => Promise<void>; disconnect?: () => Promise<void> };
+export type WalletConnection = { address: string; chainId: number; provider: WalletProvider; kind: "browser" | "tangem" };
 export type SepoliaBalances = { eth: string; usdc: string; usdcUnits: string };
 
 declare global { interface Window { ethereum?: Eip1193Provider } }
@@ -48,17 +50,40 @@ export async function ensureSepolia(provider = injectedWallet()): Promise<void> 
   if (switchedId !== SEPOLIA_CHAIN_ID) throw new Error("Wallet is still not connected to Ethereum Sepolia.");
 }
 
-export async function connectBrowserWallet(): Promise<{ address: string; chainId: number }> {
-  const provider = injectedWallet();
-  const accounts = await provider.request({ method: "eth_requestAccounts" });
+function accountAddress(accounts: unknown): string {
   if (!Array.isArray(accounts) || typeof accounts[0] !== "string" || !/^0x[a-fA-F0-9]{40}$/.test(accounts[0])) throw new Error("Wallet returned no valid public account address.");
-  await ensureSepolia(provider);
-  return { address: accounts[0], chainId: SEPOLIA_CHAIN_ID };
+  return accounts[0];
 }
 
-export async function getSepoliaBalances(address: string): Promise<SepoliaBalances> {
-  if (!/^0x[a-fA-F0-9]{40}$/.test(address)) throw new Error("Invalid public wallet address.");
+export async function connectBrowserWallet(): Promise<WalletConnection> {
   const provider = injectedWallet();
+  const address = accountAddress(await provider.request({ method: "eth_requestAccounts" }));
+  await ensureSepolia(provider);
+  return { address, chainId: SEPOLIA_CHAIN_ID, provider, kind: "browser" };
+}
+
+export async function connectTangemWallet(): Promise<WalletConnection> {
+  if (typeof window === "undefined") throw new Error("Tangem Wallet can only be connected in a browser.");
+  const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID?.trim();
+  if (!projectId) throw new Error("Set NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID to enable Tangem Wallet via WalletConnect.");
+  const { default: EthereumProvider } = await import("@walletconnect/ethereum-provider");
+  const provider = await EthereumProvider.init({
+    projectId,
+    chains: [1],
+    showQrModal: true,
+    methods: ["eth_accounts", "eth_requestAccounts"],
+    events: ["chainChanged", "accountsChanged"],
+    metadata: { name: "VBT TrustPay", description: "Verified invoice payment demo", url: window.location.origin, icons: [new URL("/vbt-logo.svg", window.location.origin).toString()] },
+  });
+  await provider.connect();
+  const address = accountAddress(await provider.request({ method: "eth_requestAccounts" }));
+  const chainId = parseChainId(await provider.request({ method: "eth_chainId" }));
+  return { address, chainId, provider, kind: "tangem" };
+}
+
+export async function getSepoliaBalances(address: string, walletProvider = injectedWallet()): Promise<SepoliaBalances> {
+  if (!/^0x[a-fA-F0-9]{40}$/.test(address)) throw new Error("Invalid public wallet address.");
+  const provider = walletProvider;
   await ensureSepolia(provider);
   const token = process.env.NEXT_PUBLIC_SEPOLIA_USDC_ADDRESS;
   if (!token || !/^0x[a-fA-F0-9]{40}$/.test(token)) throw new Error("Configure the verified Sepolia USDC contract address.");
@@ -87,8 +112,8 @@ function receiptField(receipt: unknown, field: string): unknown {
   return (receipt as Record<string, unknown>)[field];
 }
 
-export async function executeSepoliaPayment(intent: PaymentIntent, trust: TrustResult, approval: HumanApproval, walletAddress: string): Promise<{ result: PaymentResult; proof: PaymentProof }> {
-  const provider = injectedWallet();
+export async function executeSepoliaPayment(intent: PaymentIntent, trust: TrustResult, approval: HumanApproval, walletAddress: string, walletProvider = injectedWallet()): Promise<{ result: PaymentResult; proof: PaymentProof }> {
+  const provider = walletProvider;
   if (trust.paymentIntentId !== intent.id || trust.status !== "APPROVED") throw new Error("This exact payment intent has not passed Trust Engine checks.");
   const walletCheck = trust.checks.find((check) => check.code === "WALLET_MATCH");
   if (!walletCheck?.passed || !walletCheck.expected || walletCheck.expected.toLowerCase() !== intent.destinationWallet.toLowerCase()) throw new Error("Trust Engine did not verify this destination against the supplier's registered wallet.");
